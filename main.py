@@ -3,83 +3,88 @@ import os
 import streamlit as st
 
 from config import config
+from database import get_conversations, save_conversation, init_db
 from file_processor import process_file
 from qa_chain import create_qa_chain
+from utils import generate_conversation_id, get_conversation_folder
 from vector_store import get_vectorstore
 
 
 def main():
     st.set_page_config(page_title="Q&A App", layout="wide")
-
     st.title("Document Q&A Application")
 
-    # Create uploads directory if it doesn't exist
+    conn = init_db()
+
     if not os.path.exists(config.UPLOAD_FOLDER):
         os.makedirs(config.UPLOAD_FOLDER)
 
-    # Sidebar for file upload and additional information
     with st.sidebar:
-        st.subheader("Upload Documents")
-        uploaded_file = st.file_uploader("Choose a file", type=["pdf", "docx", "txt"])
+        st.subheader("Conversations")
+        if st.button("Create New Conversation"):
+            new_conversation_id = generate_conversation_id()
+            save_conversation(conn, new_conversation_id)
+            st.success(f"Created new conversation: {new_conversation_id}")
 
-        if uploaded_file:
-            # Save the file locally
-            save_path = os.path.join(config.UPLOAD_FOLDER, uploaded_file.name)
-            with open(save_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            st.success(f"File saved locally: {save_path}")
+        conversations = get_conversations(conn)
+        selected_conversation = st.selectbox(
+            "Select a conversation",
+            options=[conv[1] for conv in conversations],
+            format_func=lambda x: x
+        )
 
-            # Process the uploaded file
-            with st.spinner("Processing the uploaded file..."):
-                if process_file(save_path):
-                    st.success("File processed and added to the knowledge base successfully!")
-                else:
-                    st.error("An error occurred while processing the file. Please try again.")
+        if selected_conversation:
+            st.subheader("Upload Documents")
+            uploaded_file = st.file_uploader("Choose a file", type=["pdf", "docx", "txt"])
 
-        st.subheader("Uploaded Files")
-        uploaded_files = os.listdir(config.UPLOAD_FOLDER)
-        for file in uploaded_files:
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.write(file)
-            with col2:
-                if st.button("Delete", key=f"delete_{file}"):
-                    delete_file(file)
-                    st.rerun()
+            if uploaded_file:
+                conversation_folder = get_conversation_folder(selected_conversation)
+                if not os.path.exists(conversation_folder):
+                    os.makedirs(conversation_folder)
 
-    # Main area for Q&A
-    st.subheader("Ask a question about the documents")
-    user_question = st.text_input("Enter your question:")
+                save_path = os.path.join(conversation_folder, uploaded_file.name)
+                with open(save_path, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                st.success(f"File saved: {save_path}")
 
-    if user_question:
-        with st.spinner("Searching for an answer..."):
-            vector_store = get_vectorstore()
-            retriever = vector_store.as_retriever(
-                search_type="similarity",
-                search_kwargs={"k": 5}
-            )
-            qa_chain = create_qa_chain(retriever)
-            result = qa_chain.invoke({"input": user_question})
+                with st.spinner("Processing the uploaded file..."):
+                    if process_file(save_path, namespace=selected_conversation):
+                        st.success("File processed and added to the knowledge base successfully!")
+                    else:
+                        st.error("An error occurred while processing the file. Please try again.")
 
-            # Display the answer
-            st.subheader("Answer:")
-            st.write(result['answer'])
+            st.subheader("Uploaded Files")
+            conversation_folder = get_conversation_folder(selected_conversation)
+            if os.path.exists(conversation_folder):
+                uploaded_files = os.listdir(conversation_folder)
+                for file in uploaded_files:
+                    st.write(file)
+            else:
+                st.info("No files uploaded for this conversation yet.")
 
-            # Display the source documents
-            st.subheader("Source Documents:")
-            for doc in result['context']:
-                with st.expander(f"Document: {doc.metadata.get('file_path', 'Unknown')}"):
-                    st.write(f"Content: {doc.page_content}")
-                    st.write(f"Metadata: {doc.metadata}")
+    if selected_conversation:
+        user_question = st.text_input("Enter your question:")
 
+        if user_question:
+            with st.spinner("Searching for an answer..."):
+                vector_store = get_vectorstore(namespace=selected_conversation)
+                retriever = vector_store.as_retriever(
+                    search_type="similarity",
+                    search_kwargs={"k": 5}
+                )
+                qa_chain = create_qa_chain(retriever)
+                result = qa_chain.invoke({"input": user_question})
 
-def delete_file(file_name):
-    file_path = os.path.join(config.UPLOAD_FOLDER, file_name)
-    try:
-        os.remove(file_path)
-        st.success(f"File {file_name} deleted successfully!")
-    except Exception as e:
-        st.error(f"Error deleting file {file_name}: {e}")
+                st.subheader("Answer:")
+                st.write(result['answer'])
+
+                st.subheader("Source Documents:")
+                for doc in result['context']:
+                    with st.expander(f"Document: {doc.metadata.get('file_path', 'Unknown')}"):
+                        st.write(f"Content: {doc.page_content}")
+                        st.write(f"Metadata: {doc.metadata}")
+    else:
+        st.info("Please select or create a conversation to start.")
 
 
 if __name__ == "__main__":

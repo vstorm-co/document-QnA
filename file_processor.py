@@ -6,7 +6,7 @@ from vector_store import save_to_vectorstore
 logger = getLogger(__name__)
 
 
-def process_file(file_path: str) -> bool:
+def process_file(file_path: str, namespace: str) -> bool:
     try:
         document_loader = DocumentLoaderFactory.get_loader(file_path)
         loaded_documents = document_loader.load()
@@ -14,7 +14,7 @@ def process_file(file_path: str) -> bool:
 
         split_documents = document_loader.split_documents(loaded_documents)
         logger.info(f"Split into {len(split_documents)} chunks")
-        save_to_vectorstore(split_documents)
+        save_to_vectorstore(split_documents, namespace)
 
         return True
     except Exception as e:

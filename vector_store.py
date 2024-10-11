@@ -11,16 +11,17 @@ logger = getLogger(__name__)
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large", openai_api_key=config.OPENAI_API_KEY)
 
 
-def save_to_vectorstore(documents: list[Document]) -> None:
+def save_to_vectorstore(documents: list[Document], namespace: str) -> None:
     try:
         Pinecone.from_documents(
             documents,
             embeddings,
-            index_name=config.PINECONE_INDEX_NAME
+            index_name=config.PINECONE_INDEX_NAME,
+            namespace=namespace,
         )
     except Exception as e:
         logger.error(f"Error saving to vectorstore: {e}")
 
 
-def get_vectorstore():
-    return Pinecone.from_existing_index(config.PINECONE_INDEX_NAME, embeddings)
+def get_vectorstore(namespace: str):
+    return Pinecone.from_existing_index(config.PINECONE_INDEX_NAME, embeddings, namespace=namespace)
