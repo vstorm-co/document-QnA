@@ -1,0 +1,15 @@
+.env
+.env.prod
+practice/.env
+myvenv/
+motivo_postgres/
+venv/
+uploads/
+frontend/public/*
+app/motivo/*
+app/static/
+docker-entrypoint.sh
+.idea/
+app/.psql_history
+app/.bash_history
+celerybeat-schedule
