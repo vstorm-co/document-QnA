@@ -2,11 +2,10 @@ from abc import ABC, abstractmethod
 from logging import getLogger
 from typing import Optional
 
+from langchain_community.document_loaders import PyPDFLoader, UnstructuredMarkdownLoader, UnstructuredExcelLoader, \
+    CSVLoader as CSVDocumentLoader, Docx2txtLoader
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from llama_parse import LlamaParse
-
-from config import config
 
 logger = getLogger(__name__)
 
@@ -16,7 +15,7 @@ class DocumentLoader(ABC):
         self.file_path = file_path
 
     @abstractmethod
-    def load(self) -> Optional[list[Document]]:
+    def load(self) -> list[Document] | None:
         pass
 
     def get_file_name(self) -> str:
@@ -45,33 +44,82 @@ class DocumentLoader(ABC):
         return docs
 
 
-class LlamaLoader(DocumentLoader):
-    def load(self) -> Optional[list[Document]]:
+class PDFLoader(DocumentLoader):
+    def load(self) -> list[Document] | None:
         try:
-            parser = LlamaParse(
-                api_key=config.LLAMA_API_KEY,
-                result_type="markdown",
-                verbose=True,
-                language="en",
-            )
-            documents = parser.load_data(self.file_path)
-
-            langchain_documents = []
-
-            for doc in documents:
-                langchain_documents.append(doc.to_langchain_format())
-
-            return langchain_documents
+            loader = PyPDFLoader(self.file_path)
+            return loader.load_and_split()
         except Exception as e:
             logger.error(f"Error loading PDF: {e}")
             return None
 
 
+class DOCXLoader(DocumentLoader):
+    def load(self) -> list[Document] | None:
+        try:
+            loader = Docx2txtLoader(self.file_path)
+            return loader.load_and_split()
+        except Exception as e:
+            logger.error(f"Error loading DOCX: {e}")
+            return None
+
+
+class CSVLoader(DocumentLoader):
+    def load(self) -> list[Document] | None:
+        try:
+            loader = CSVDocumentLoader(self.file_path)
+            return loader.load_and_split()
+        except Exception as e:
+            logger.error(f"Error loading CSV: {e}")
+            return None
+
+
+class XLSXLoader(DocumentLoader):
+    def load(self) -> list[Document] | None:
+        try:
+            loader = UnstructuredExcelLoader(self.file_path)
+            return loader.load_and_split()
+        except Exception as e:
+            logger.error(f"Error loading XLSX: {e}")
+            return None
+
+
+class MarkdownLoader(DocumentLoader):
+    def load(self) -> list[Document] | None:
+        try:
+            loader = UnstructuredMarkdownLoader(self.file_path)
+            return loader.load()
+        except Exception as e:
+            logger.error(f"Error loading MD: {e}")
+            return None
+
+
+class TXTLoader(DocumentLoader):
+    def load(self) -> list[Document] | None:
+        try:
+            with open(self.file_path, "r") as file:
+                data = file.read()
+                return [Document(page_content=data)]
+        except Exception as e:
+            logger.error(f"Error loading TXT: {e}")
+            return None
+
+
 class DocumentLoaderFactory:
     @staticmethod
-    def get_loader(file_path: str):
+    def get_loader(file_path):
         extension = file_path.split('.')[-1].lower()
-        if extension in ["pdf", "pptx", "docx", "xlsx", "html"]:
-            return LlamaLoader(file_path)
+        if extension == 'pdf':
+            return PDFLoader(file_path)
+        elif extension == 'md':
+            return MarkdownLoader(file_path)
+        elif extension == 'txt':
+            return TXTLoader(file_path)
+        elif extension == 'csv':
+            return CSVLoader(file_path)
+        elif extension == 'xlsx':
+            return XLSXLoader(file_path)
+        elif extension == 'docx':
+            return DOCXLoader(file_path)
         else:
             raise ValueError(f"Unsupported file extension: {extension}")

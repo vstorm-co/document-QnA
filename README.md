@@ -1,135 +1,74 @@
-# FastAPI starter
+# Document Q&A Application
 
-Based on https://github.com/zhanymkanov/fastapi_production_template
+## About the Project
 
-This repo is kind of a template I use when starting up new FastAPI projects:
-- production-ready
-    - gunicorn with dynamic workers configuration (stolen from [@tiangolo](https://github.com/tiangolo))
-    - Dockerfile optimized for small size and fast builds with a non-root user
-    - JSON logs
-    - sentry for deployed envs
-- easy local development
-    - environment with configured postgres and redis
-    - script to lint code with `black`, `autoflake`, `isort` (also stolen from [@tiangolo](https://github.com/tiangolo))
-    - configured pytest with `async-asgi-testclient`, `pytest-env`, `pytest-asyncio`
-    - fully typed to comply with `mypy`
-- SQLAlchemy with slightly configured `alembic`
-    - async db calls with `asyncpg`
-    - set up `sqlalchemy2-stubs`
-    - migrations set in easy to sort format (`YYYY-MM-DD_slug`)
-- pre-installed JWT authorization
-    - short-lived access token
-    - long-lived refresh token which is stored in http-only cookies
-    - salted password storage with `bcrypt`
-- global pydantic model with
-    - `orjson`
-    - explicit timezone setting during JSON export
-- and some other extras like global exceptions, sqlalchemy keys naming convention, shortcut scripts for alembic, etc.
+This project is a Document Q&A Application that allows users to upload various types of documents (PDF, DOCX, TXT, CSV, XLSX, MD), process them, and then ask questions about the content. The application uses advanced natural language processing techniques to provide accurate answers based on the uploaded documents.
 
-## Local Development
+<img src="assets/images/img_1.png" alt="image_1"/>
+<img src="assets/images/img_2.png" alt="image_22"/>
 
-### First Build Only
-1. `cp .env.example .env`
-2. `docker network create traefik_webgateway`
-3. make sure you have `starter_postgres` volume `docker volume create starter_postgres`
-3. `docker-compose up -d --build`
+## Detailed Explanation
 
-### Linters
-Format the code
-```shell
-docker compose exec app format
-```
+The application consists of several key components:
 
-### Migrations
-- Create an automatic migration from changes in `src/database.py`
-```shell
-docker compose exec app makemigrations *migration_name*
-```
-- Run migrations
-```shell
-docker compose exec app migrate
-```
-- Downgrade migrations
-```shell
-docker compose exec app downgrade -1  # or -2 or base or hash of the migration
-```
-### Tests
-All tests are integrational and require DB connection.
+1. **Document Loaders**: The project supports multiple file types through various document loaders (PDF, DOCX, CSV, XLSX, Markdown, TXT). These loaders are responsible for extracting text content from the uploaded files.
 
-One of the choices I've made is to use default database (`postgres`), separated from app's `app` database.
-- Using default database makes it easier to run tests in CI/CD environments, since there is no need to setup additional databases
-- Tests are run with `force_rollback=True`, i.e. every transaction made is then reverted
+2. **Text Splitting**: After loading, the documents are split into smaller chunks to facilitate efficient processing and retrieval.
 
-Run tests
-```shell
-docker compose exec app pytest
-```
+3. **Vector Store**: The processed text chunks are embedded and stored in a Pinecone vector database, allowing for quick and efficient similarity searches.
 
+4. **QA Chain**: The application uses a question-answering chain powered by OpenAI's language model to generate responses based on the retrieved context.
 
-## Database backup
+5. **Web Interface**: A Streamlit-based web interface allows users to interact with the application, upload documents, and ask questions.
 
-Set backup job with Crontab
-```bash
-crontab -e
+6. **Conversation Management**: Users can create and switch between different conversations, with each conversation having its own set of uploaded documents and question history.
 
-# add the following line, update path if needed
-0 1 * * * sh /home/ubuntu/polskiearchiwa.pl/archiwum/etc/backup_database.sh
-```
+## Installation
 
-### Restore
+To set up the Document Q&A Application, follow these steps:
 
-1. From backups file copy file with dump, for example
-```bash
-cp backups/postgres/archiwum_backup_13-07-2023.sql backup.sql
-```
-2. In `docker-compose.production.yml` uncomment volume with backup.sql file.
-```yaml
-  - ./backup.sql:/tmp/backup.sql 
-```
-3. Re-run docker db container
-```bash
-docker-compose -f docker-compose.production.yml up -d db
-# or using available alias
-dcupd db 
-```
-4. Login to db container bash
-```bash
-docker-compose -f docker-compose.production.yml exec db bash
-# or using available alias
-dce db bash
-```
-5. In docker db container login to PostgreSQL database and recreate database
-```bash
-psql -U postgres 
-```
-```postgresql
--- create temporary database because we can't drop current used database
-CREATE DATABASE temp;
--- enter to temp database
-\c temp
--- now we can recreate our database
-DROP DATABASE postgres;
-CREATE DATABASE postgres;
--- back to bash
-\q
-```
-6. Now we have empty/fresh database, let's import dump file
-```bash
-psql -U postgres -d postgres < /tmp/backup.sql
-```
-7. Scroll to check for errors
-8. You can exit from docker container
-```bash
-exit
-```
+1. Clone the repository:
+   ```
+   git clone https://github.com/vstorm-co/opensource-rag.git
+   ```
 
-```bash
-psql -U postgres -d postgres < /tmp/backup.sql
-```
+2. Create a virtual environment and activate it:
+   ```
+   python -m venv venv
+   source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+   ```
 
+3. Install the required dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
 
-## TODO (order by priority)
+4. Set up environment variables:
+   Create a `.env` file in the project root and add the following variables:
+   ```
+   PINECONE_API_KEY=your_pinecone_api_key
+   PINECONE_INDEX_NAME=your_pinecone_index_name
+   OPENAI_API_KEY=your_openai_api_key
+   ```
 
-- celery flower - add labels for traefik
-- add basic auth on production for celery flower https://doc.traefik.io/traefik/middlewares/http/basicauth/
-- multi stage builds for production Dockerfile https://testdriven.io/blog/docker-best-practices/#use-multi-stage-builds
+5. Initialize the SQLite database:
+   ```
+   python -c "from database import init_db; init_db()"
+   ```
+
+6. Run the Streamlit application:
+   ```
+   streamlit run main.py
+   ```
+
+## Usage
+
+1. Start the application by running `streamlit run main.py`.
+2. Create a new conversation or select an existing one from the sidebar.
+3. Upload documents using the file uploader in the sidebar.
+4. Once documents are processed, enter your question in the main area.
+5. The application will display the answer along with relevant source documents.
+
+## Contributing
+
+Contributions to the project are welcome. Please fork the repository and submit a pull request with your proposed changes.
